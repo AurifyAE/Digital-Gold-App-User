@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Target, Calendar, CheckCircle, Clock, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Plus, Target, Calendar, CheckCircle, Clock, AlertCircle, ArrowLeft, AlertTriangle, X } from 'lucide-react';
 import DirhamIndigoIcon from '../../assets/images/Dirham_Indigo.png';
 import DirhamGreenIcon from '../../assets/images/Dirham_Greeen.png';
 import DirhamBlackIcon from '../../assets/images/Dirham_Black.png';
@@ -26,7 +26,49 @@ const Toast = ({ message, isVisible, onClose }) => {
   );
 };
 
-const AddAim = ({ onAimAdded, onBack }) => {
+// KYC Modal Component
+const KYCModal = ({ isVisible, onClose, onKYCRedirect }) => {
+  if (!isVisible) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="text-yellow-600" size={32} />
+          </div>
+          
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            KYC Verification Required
+          </h3>
+          
+          <p className="text-gray-600 mb-6">
+            To create new financial aims, you need to complete your KYC (Know Your Customer) verification first. 
+            This is required for security and regulatory compliance.
+          </p>
+          
+          <div className="space-y-3">
+            <button
+              onClick={onKYCRedirect}
+              className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg hover:bg-indigo-700 font-semibold transition-colors"
+            >
+              Complete KYC Verification
+            </button>
+            
+            <button
+              onClick={onClose}
+              className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AddAim = ({ onAimAdded, onBack, onKYCRequired }) => {
   const [aimData, setAimData] = useState({
     name: '',
     months: '',
@@ -40,6 +82,7 @@ const AddAim = ({ onAimAdded, onBack }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showKYCModal, setShowKYCModal] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -101,7 +144,7 @@ const AddAim = ({ onAimAdded, onBack }) => {
       green: DirhamGreenIcon,
       black: DirhamBlackIcon
     };
-    const Icon = iconMap[color] || DirhamBlackIcon; // Default to black if color is invalid
+    const Icon = iconMap[color] || DirhamBlackIcon;
     const formattedAmount = new Intl.NumberFormat('en-IN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -116,6 +159,15 @@ const AddAim = ({ onAimAdded, onBack }) => {
         {formattedAmount}
       </span>
     );
+  };
+
+  const handleKYCRedirect = () => {
+    setShowKYCModal(false);
+    if (onKYCRequired) {
+      onKYCRequired();
+    } else {
+      console.log('Redirect to KYC verification');
+    }
   };
 
   const handleCalculate = async () => {
@@ -171,7 +223,7 @@ const AddAim = ({ onAimAdded, onBack }) => {
       const response = await addAim(paymentData);
       
       if (!response.success) {
-        onAimAdded(response.data, aimData.name); // Pass aim name for toast and trigger refresh
+        onAimAdded(response.data, aimData.name);
         setAimData({
           name: '',
           months: '',
@@ -187,7 +239,26 @@ const AddAim = ({ onAimAdded, onBack }) => {
       }
     } catch (error) {
       console.error('Error adding aim:', error);
-      setErrors({ general: 'Failed to add aim. Please try again.' });
+      
+      // Check for KYC verification error
+      if (error.response?.status === 403) {
+        if (error.response.data && typeof error.response.data === 'string') {
+          if (error.response.data.includes('User kyc not verified') || 
+              error.response.data.toLowerCase().includes('kyc')) {
+            setShowKYCModal(true);
+            return;
+          }
+        }
+      }
+      
+      // Check if the error response indicates KYC requirement
+      if (error.response?.data?.error === 'KYC_NOT_VERIFIED' || 
+          error.response?.data?.message?.toLowerCase().includes('kyc') ||
+          error.response?.data?.requiresKYC) {
+        setShowKYCModal(true);
+      } else {
+        setErrors({ general: 'Failed to add aim. Please try again.' });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -200,220 +271,229 @@ const AddAim = ({ onAimAdded, onBack }) => {
   ];
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-white rounded-xl shadow-lg p-8">
-        <div className="flex items-center mb-6">
-          <button
-            onClick={onBack}
-            className="mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <ArrowLeft size={20} className="text-gray-600" />
-          </button>
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900">Add New Aim</h2>
-            <p className="text-gray-600">Set a financial goal and track your savings progress</p>
-          </div>
-        </div>
-
-        {errors.general && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-6">
-            {errors.general}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Aim Name *
-            </label>
-            <input
-              type="text"
-              name="name"
-              value={aimData.name}
-              onChange={handleChange}
-              className={`w-full px-4 py-3 border ${
-                errors.name ? 'border-red-300' : 'border-gray-300'
-              } rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
-              placeholder="e.g., Buy a new car, Build house"
-            />
-            {errors.name && (
-              <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <img
-                  src={DirhamBlackIcon}
-                  alt="AED"
-                  style={{ width: '12.8px', height: '12.8px', marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }}
-                />
-                Target Amount *
-              </label>
-              <input
-                type="number"
-                name="amount"
-                value={aimData.amount}
-                onChange={handleChange}
-                min="1"
-                step="0.01"
-                className={`w-full px-4 py-3 border ${
-                  errors.amount ? 'border-red-300' : 'border-gray-300'
-                } rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
-                placeholder="e.g., 200000"
-              />
-              {errors.amount && (
-                <p className="mt-1 text-sm text-red-600">{errors.amount}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Calendar size={16} className="inline mr-1" />
-                Duration (Months) *
-              </label>
-              <input
-                type="number"
-                name="months"
-                value={aimData.months}
-                onChange={handleChange}
-                min="1"
-                className={`w-full px-4 py-3 border ${
-                  errors.months ? 'border-red-300' : 'border-gray-300'
-                } rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
-                placeholder="e.g., 24"
-              />
-              {errors.months && (
-                <p className="mt-1 text-sm text-red-600">{errors.months}</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Payment Cycle
-            </label>
-            <select
-              name="payment_cycle"
-              value={aimData.payment_cycle}
-              onChange={handleChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-            >
-              {paymentCycleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
+    <>
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          <div className="flex items-center mb-6">
             <button
-              type="button"
-              onClick={handleCalculate}
-              disabled={isCalculating || isSubmitting}
-              className="bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center space-x-2 transition-all duration-200"
+              onClick={onBack}
+              className="mr-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
-              {isCalculating ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span>Calculating...</span>
-                </>
-              ) : (
-                <>
-                  <span>Calculate EMI</span>
-                </>
-              )}
+              <ArrowLeft size={20} className="text-gray-600" />
             </button>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900">Add New Aim</h2>
+              <p className="text-gray-600">Set a financial goal and track your savings progress</p>
+            </div>
           </div>
 
-          {calculatedEmi !== null && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="text-sm font-semibold text-blue-900 mb-2">💰 Estimated Payment:</h4>
-              <p className="text-lg font-bold text-blue-800">
-                {formatPrice(calculatedEmi, 1.4, 'indigo')} per {aimData.payment_cycle}
-              </p>
-              <p className="text-sm text-blue-700">
-                Total payments: {totalPayments}
-              </p>
-              <p className="flex text-sm text-blue-700">
-                Total Amount: {formatPrice(totalAmount, 0.7, 'indigo')}
-              </p>
-              <p className="text-sm text-blue-700">
-                End Date: {completionDate}
-              </p>
+          {errors.general && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-6">
+              {errors.general}
             </div>
           )}
 
-          <div className="flex space-x-4">
-            <button
-              type="submit"
-              disabled={isSubmitting || isCalculating || calculatedEmi === null}
-              className="flex-1 bg-indigo-600 text-white py-3 px-6 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center space-x-2 transition-all duration-200"
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span>Adding Aim...</span>
-                </>
-              ) : (
-                <>
-                  <Plus size={20} />
-                  <span>Add Aim</span>
-                </>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Aim Name *
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={aimData.name}
+                onChange={handleChange}
+                className={`w-full px-4 py-3 border ${
+                  errors.name ? 'border-red-300' : 'border-gray-300'
+                } rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                placeholder="e.g., Buy a new car, Build house"
+              />
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name}</p>
               )}
-            </button>
-            
-            <button
-              type="button"
-              onClick={onBack}
-              className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold transition-colors duration-200"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+            </div>
 
-        <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-4">
-          <h4 className="text-sm font-semibold text-green-900 mb-2">💡 Tips for Setting Financial Aims:</h4>
-          <ul className="text-sm text-green-800 space-y-1">
-            <li className="flex items-center">
-              <img
-                src={DirhamGreenIcon}
-                alt="AED"
-                style={{ width: '11.2px', height: '11.2px', marginRight: '4px' }}
-              />
-              Set realistic and achievable targets
-            </li>
-            <li className="flex items-center">
-              <img
-                src={DirhamGreenIcon}
-                alt="AED"
-                style={{ width: '11.2px', height: '11.2px', marginRight: '4px' }}
-              />
-              Choose a payment cycle that fits your income schedule
-            </li>
-            <li className="flex items-center">
-              <img
-                src={DirhamGreenIcon}
-                alt="AED"
-                style={{ width: '11.2px', height: '11.2px', marginRight: '4px' }}
-              />
-              Consider setting up automatic payments to stay consistent
-            </li>
-            <li className="flex items-center">
-              <img
-                src={DirhamGreenIcon}
-                alt="AED"
-                style={{ width: '11.2px', height: '11.2px', marginRight: '4px' }}
-              />
-              Review your progress regularly and adjust if needed
-            </li>
-          </ul>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <img
+                    src={DirhamBlackIcon}
+                    alt="AED"
+                    style={{ width: '12.8px', height: '12.8px', marginRight: '4px', display: 'inline-block', verticalAlign: 'middle' }}
+                  />
+                  Target Amount *
+                </label>
+                <input
+                  type="number"
+                  name="amount"
+                  value={aimData.amount}
+                  onChange={handleChange}
+                  min="1"
+                  step="0.01"
+                  className={`w-full px-4 py-3 border ${
+                    errors.amount ? 'border-red-300' : 'border-gray-300'
+                  } rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                  placeholder="e.g., 200000"
+                />
+                {errors.amount && (
+                  <p className="mt-1 text-sm text-red-600">{errors.amount}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Calendar size={16} className="inline mr-1" />
+                  Duration (Months) *
+                </label>
+                <input
+                  type="number"
+                  name="months"
+                  value={aimData.months}
+                  onChange={handleChange}
+                  min="1"
+                  className={`w-full px-4 py-3 border ${
+                    errors.months ? 'border-red-300' : 'border-gray-300'
+                  } rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors`}
+                  placeholder="e.g., 24"
+                />
+                {errors.months && (
+                  <p className="mt-1 text-sm text-red-600">{errors.months}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Payment Cycle
+              </label>
+              <select
+                name="payment_cycle"
+                value={aimData.payment_cycle}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+              >
+                {paymentCycleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={handleCalculate}
+                disabled={isCalculating || isSubmitting}
+                className="bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center space-x-2 transition-all duration-200"
+              >
+                {isCalculating ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>Calculating...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Calculate EMI</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {calculatedEmi !== null && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-blue-900 mb-2">💰 Estimated Payment:</h4>
+                <p className="text-lg font-bold text-blue-800">
+                  {formatPrice(calculatedEmi, 1.4, 'indigo')} per {aimData.payment_cycle}
+                </p>
+                <p className="text-sm text-blue-700">
+                  Total payments: {totalPayments}
+                </p>
+                <p className="flex text-sm text-blue-700">
+                  Total Amount: {formatPrice(totalAmount, 0.7, 'indigo')}
+                </p>
+                <p className="text-sm text-blue-700">
+                  End Date: {completionDate}
+                </p>
+              </div>
+            )}
+
+            <div className="flex space-x-4">
+              <button
+                type="submit"
+                disabled={isSubmitting || isCalculating || calculatedEmi === null}
+                className="flex-1 bg-indigo-600 text-white py-3 px-6 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center space-x-2 transition-all duration-200"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>Adding Aim...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus size={20} />
+                    <span>Add Aim</span>
+                  </>
+                )}
+              </button>
+              
+              <button
+                type="button"
+                onClick={onBack}
+                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold transition-colors duration-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-8 bg-green-50 border border-green-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-green-900 mb-2">💡 Tips for Setting Financial Aims:</h4>
+            <ul className="text-sm text-green-800 space-y-1">
+              <li className="flex items-center">
+                <img
+                  src={DirhamGreenIcon}
+                  alt="AED"
+                  style={{ width: '11.2px', height: '11.2px', marginRight: '4px' }}
+                />
+                Set realistic and achievable targets
+              </li>
+              <li className="flex items-center">
+                <img
+                  src={DirhamGreenIcon}
+                  alt="AED"
+                  style={{ width: '11.2px', height: '11.2px', marginRight: '4px' }}
+                />
+                Choose a payment cycle that fits your income schedule
+              </li>
+              <li className="flex items-center">
+                <img
+                  src={DirhamGreenIcon}
+                  alt="AED"
+                  style={{ width: '11.2px', height: '11.2px', marginRight: '4px' }}
+                />
+                Consider setting up automatic payments to stay consistent
+              </li>
+              <li className="flex items-center">
+                <img
+                  src={DirhamGreenIcon}
+                  alt="AED"
+                  style={{ width: '11.2px', height: '11.2px', marginRight: '4px' }}
+                />
+                Review your progress regularly and adjust if needed
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* KYC Modal */}
+      <KYCModal 
+        isVisible={showKYCModal} 
+        onClose={() => setShowKYCModal(false)} 
+        onKYCRedirect={handleKYCRedirect}
+      />
+    </>
   );
 };
 
@@ -424,7 +504,7 @@ const AimList = ({ aims, onAddAim }) => {
       green: DirhamGreenIcon,
       black: DirhamBlackIcon
     };
-    const Icon = iconMap[color] || DirhamBlackIcon; // Default to black if color is invalid
+    const Icon = iconMap[color] || DirhamBlackIcon;
     const formattedAmount = new Intl.NumberFormat('en-IN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -562,11 +642,12 @@ const AimList = ({ aims, onAddAim }) => {
   );
 };
 
-const AimsApp = ({ user }) => {
+const AimsApp = ({ user, onKYCRequired }) => {
   const [currentView, setCurrentView] = useState('list');
   const [aims, setAims] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState({ isVisible: false, message: '' });
+  const [showKYCModal, setShowKYCModal] = useState(false);
 
   useEffect(() => {
     fetchAims();
@@ -590,19 +671,34 @@ const AimsApp = ({ user }) => {
     }
   };
 
-  const handleAddAim = () => {
+  const handleKYCRedirect = () => {
+    setShowKYCModal(false);
+    if (onKYCRequired) {
+      onKYCRequired();
+    } else {
+      console.log('Redirect to KYC verification');
+    }
+  };
+
+  const checkKYCStatus = async () => {
+    // You can implement a KYC check API call here
+    // For now, we'll simulate the check by trying to proceed
+    // The actual KYC check will happen when the user tries to submit the aim
     setCurrentView('add');
+  };
+
+  const handleAddAim = () => {
+    // Check KYC status before proceeding to add aim
+    checkKYCStatus();
   };
 
   const handleAimAdded = async (newAim, aimName) => {
     try {
-      // Refetch aims from the server to ensure the latest data
       await fetchAims();
       setCurrentView('list');
       setToast({ isVisible: true, message: `Aim "${aimName}" created successfully!` });
     } catch (error) {
       console.error('Error refreshing aims after adding:', error);
-      // Fallback: update state locally if fetch fails
       setAims(prev => [...prev, newAim]);
       setCurrentView('list');
       setToast({ isVisible: true, message: `Aim "${aimName}" created successfully!` });
@@ -611,7 +707,7 @@ const AimsApp = ({ user }) => {
 
   const handleBackToList = () => {
     setCurrentView('list');
-    fetchAims(); // Refresh the aim list
+    fetchAims();
   };
 
   const handleToastClose = () => {
@@ -643,9 +739,36 @@ const AimsApp = ({ user }) => {
             onAddAim={handleAddAim}
           />
         ) : (
-          <AddAim onAimAdded={handleAimAdded} onBack={handleBackToList} />
+          <AddAim 
+            onAimAdded={handleAimAdded} 
+            onBack={handleBackToList}
+            onKYCRequired={handleKYCRedirect}
+          />
         )}
       </div>
+
+      {/* KYC Modal for main app level */}
+      <KYCModal 
+        isVisible={showKYCModal} 
+        onClose={() => setShowKYCModal(false)} 
+        onKYCRedirect={handleKYCRedirect}
+      />
+
+      <style jsx>{`
+        @keyframes slide-in {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 };

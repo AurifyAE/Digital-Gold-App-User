@@ -63,3 +63,19 @@ export const updateProfile = (data) => {
 export const transactionHistory = () => {
     return axiosInstance.get("/transaction");
 };
+
+export const addKyc = async (formData) => {
+    return axiosInstance.post('/kyc', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    });
+};
+
+export const getKyc = () => {
+    return axiosInstance.get('/kyc');
+}
+
+export const updateKyc = (formData) => {
+    return axiosInstance.patch('/kyc', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    });
+}

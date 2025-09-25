@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { User, Edit, MapPin, Mail, Phone, Calendar, Award, Settings, Plus, Save, X } from 'lucide-react';
+import { User, Edit, MapPin, Mail, Phone, Calendar, Award, Settings, Plus, Save, X, CheckCircle, AlertCircle, CreditCard } from 'lucide-react';
 import { getProfile, addAddress, updateAddress, updateProfile } from '../../api/api';
 
 const GetProfile = () => {
@@ -14,7 +14,9 @@ const GetProfile = () => {
     const [formData, setFormData] = useState({
         street: '',
         city: '',
+        district: '',
         state: '',
+        country: '',
         postal_code: ''
     });
     const [profileFormData, setProfileFormData] = useState({
@@ -29,6 +31,39 @@ const GetProfile = () => {
     useEffect(() => {
         fetchProfile();
     }, [user]);
+
+    const calculateProfileCompletion = (profileData) => {
+        const completionItems = [
+            {
+                name: 'Personal Information',
+                completed: !!(profileData.first_name && profileData.last_name && profileData.email && profileData.mobile_no && profileData.date_of_birth && profileData.gender),
+                weight: 40,
+                description: 'Complete your basic profile details'
+            },
+            {
+                name: 'Address Information',
+                completed: profileData.address && profileData.address.length > 0,
+                weight: 30,
+                description: 'Add your address for better service'
+            },
+            {
+                name: 'KYC Verification',
+                completed: profileData.kyc && profileData.kyc.length > 0,
+                weight: 30,
+                description: 'Complete KYC verification for account security'
+            }
+        ];
+
+        const totalWeight = completionItems.reduce((sum, item) => sum + item.weight, 0);
+        const completedWeight = completionItems.reduce((sum, item) => sum + (item.completed ? item.weight : 0), 0);
+        const completionPercentage = Math.round((completedWeight / totalWeight) * 100);
+
+        return {
+            percentage: completionPercentage,
+            items: completionItems,
+            isComplete: completionPercentage === 100
+        };
+    };
 
     const fetchProfile = async () => {
         try {
@@ -52,6 +87,7 @@ const GetProfile = () => {
                 occupation: null,
                 company: null,
                 profileImage: null,
+                hasKYC: profileData.kyc && profileData.kyc.length > 0,
                 stats: {
                     totalSchemes: 3,
                     activeAims: 5,
@@ -64,14 +100,15 @@ const GetProfile = () => {
                 id: profileData.address[0]._id,
                 street: profileData.address[0].street,
                 city: profileData.address[0].city,
+                district: profileData.address[0].district || '',
                 state: profileData.address[0].state,
+                country: profileData.address[0].country || '',
                 postal_code: profileData.address[0].postal_code
             } : null;
 
             setProfile(mappedProfile);
             setAddress(addressData);
 
-            // Set profile form data
             setProfileFormData({
                 first_name: profileData.first_name || '',
                 last_name: profileData.last_name || '',
@@ -85,7 +122,9 @@ const GetProfile = () => {
                 setFormData({
                     street: addressData.street || '',
                     city: addressData.city || '',
+                    district: addressData.district || '',
                     state: addressData.state || '',
+                    country: addressData.country || '',
                     postal_code: addressData.postal_code || ''
                 });
             }
@@ -118,7 +157,9 @@ const GetProfile = () => {
         setFormData({
             street: '',
             city: '',
+            district: '',
             state: '',
+            country: '',
             postal_code: ''
         });
         setShowAddressForm(true);
@@ -169,7 +210,9 @@ const GetProfile = () => {
             setFormData({
                 street: address.street || '',
                 city: address.city || '',
+                district: address.district || '',
                 state: address.state || '',
+                country: address.country || '',
                 postal_code: address.postal_code || ''
             });
         }
@@ -177,7 +220,6 @@ const GetProfile = () => {
 
     const handleCancelProfile = () => {
         setShowProfileEdit(false);
-        // Reset form data to original values
         setProfileFormData({
             first_name: profile.first_name || '',
             last_name: profile.last_name || '',
@@ -204,12 +246,22 @@ const GetProfile = () => {
         );
     }
 
+    const profileCompletion = calculateProfileCompletion({
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        email: profile.email,
+        mobile_no: profile.phone,
+        date_of_birth: profile.dateOfBirth,
+        gender: profile.gender,
+        address: address ? [address] : [],
+        kyc: profile.hasKYC ? [{}] : []
+    });
+
     return (
         <div className="space-y-4 sm:space-y-6 lg:space-y-8 p-2 sm:p-4">
-            {/* Profile Header */}
+            {/* Existing Profile Header */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-4 sm:p-6 lg:p-8 text-white">
                 <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-6">
-                    {/* Profile Image */}
                     <div className="relative flex-shrink-0">
                         {profile.profileImage ? (
                             <img
@@ -225,14 +277,12 @@ const GetProfile = () => {
                             </div>
                         )}
                     </div>
-
-                    {/* Profile Info */}
                     <div className="flex-1 text-center md:text-left">
                         <h1 className="text-2xl sm:text-3xl font-bold mb-2">{profile.name}</h1>
-                        <div className="flex flex-wrap justify-center md:justify-start gap-2 sm:gap-4 text-xs sm:text-sm">
+                        <div className="flex flex-col justify-center md:justify-start sm:gap-2 text-xs sm:text-sm">
                             <div className="flex items-center space-x-1">
-                                <MapPin size={14} className="sm:w-4 sm:h-4" />
-                                <span>{profile.location}</span>
+                                <Mail size={14} className="sm:w-4 sm:h-4" />
+                                <span>{profile.email}</span>
                             </div>
                             <div className="flex items-center space-x-1">
                                 <Calendar size={14} className="sm:w-4 sm:h-4" />
@@ -244,7 +294,36 @@ const GetProfile = () => {
                 </div>
             </div>
 
-            {/* Stats Cards */}
+            {/* Profile Completion Progress */}
+            {profileCompletion.percentage < 100 && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium text-gray-700">Profile Completion</span>
+                        <span className="text-sm font-semibold text-gray-900">{profileCompletion.percentage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                        <div 
+                            className="bg-green-500 h-2 rounded-full transition-all duration-500 ease-out"
+                            style={{ width: `${profileCompletion.percentage}%` }}
+                        ></div>
+                    </div>
+                    
+                    {/* Completion Tasks */}
+                    <div className="space-y-2">
+                        <p className="text-xs text-gray-600 mb-2">Complete these to reach 100%:</p>
+                        {profileCompletion.items.map((item, index) => (
+                            !item.completed && (
+                                <div key={index} className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-700">• {item.name}</span>
+                                    {/* <span className="text-gray-500">{item.weight}%</span> */}
+                                </div>
+                            )
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6">
                     <div className="flex items-center justify-between">
@@ -257,7 +336,6 @@ const GetProfile = () => {
                         </div>
                     </div>
                 </div>
-
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6">
                     <div className="flex items-center justify-between">
                         <div>
@@ -269,7 +347,6 @@ const GetProfile = () => {
                         </div>
                     </div>
                 </div>
-
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6">
                     <div className="flex items-center justify-between">
                         <div>
@@ -281,7 +358,6 @@ const GetProfile = () => {
                         </div>
                     </div>
                 </div>
-
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6">
                     <div className="flex items-center justify-between">
                         <div>
@@ -295,15 +371,13 @@ const GetProfile = () => {
                 </div>
             </div>
 
-            {/* Personal & Contact Information - Merged Section */}
+            {/* Personal Information Section */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-                {/* Header */}
                 <div className="flex items-center justify-between mb-4 sm:mb-6">
                     <h3 className="text-lg sm:text-xl font-semibold text-gray-900 flex items-center space-x-2">
                         <User size={18} className="sm:w-5 sm:h-5" />
                         <span>Personal & Contact Information</span>
                     </h3>
-
                     {!showProfileEdit && (
                         <button
                             onClick={handleEditProfile}
@@ -315,10 +389,8 @@ const GetProfile = () => {
                     )}
                 </div>
 
-                {/* View Mode */}
                 {!showProfileEdit ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Personal Information */}
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
@@ -339,8 +411,6 @@ const GetProfile = () => {
                                 <p className="text-sm text-gray-900 capitalize">{profile.gender}</p>
                             </div>
                         </div>
-
-                        {/* Contact Information */}
                         <div className="space-y-4">
                             <div className="flex items-center space-x-3">
                                 <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -351,7 +421,6 @@ const GetProfile = () => {
                                     <p className="text-sm text-gray-900 truncate">{profile.email}</p>
                                 </div>
                             </div>
-
                             <div className="flex items-center space-x-3">
                                 <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
                                     <Phone className="text-gray-600" size={16} />
@@ -362,7 +431,6 @@ const GetProfile = () => {
                                 </div>
                             </div>
                         </div>
-
                         {profile.website && (
                             <div className="md:col-span-2 border-t pt-4">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
@@ -378,7 +446,6 @@ const GetProfile = () => {
                         )}
                     </div>
                 ) : (
-                    /* Edit Mode */
                     <form onSubmit={handleSubmitProfile} className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
@@ -406,7 +473,6 @@ const GetProfile = () => {
                                 />
                             </div>
                         </div>
-
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                             <input
@@ -419,7 +485,6 @@ const GetProfile = () => {
                                 required
                             />
                         </div>
-
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number</label>
                             <input
@@ -432,7 +497,6 @@ const GetProfile = () => {
                                 required
                             />
                         </div>
-
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
@@ -461,7 +525,6 @@ const GetProfile = () => {
                                 </select>
                             </div>
                         </div>
-
                         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 pt-2">
                             <button
                                 type="submit"
@@ -514,17 +577,17 @@ const GetProfile = () => {
                 {!showAddressForm ? (
                     address ? (
                         <div className="p-3 sm:p-4 border-2 rounded-lg border-indigo-200 bg-indigo-50">
-                            <div className="flex items-start justify-between mb-2">
+                            {/* <div className="flex items-start justify-between mb-2">
                                 <div>
                                     <h4 className="font-semibold text-gray-900">Home Address</h4>
                                     <span className="inline-block px-2 py-1 bg-indigo-100 text-indigo-800 text-xs font-medium rounded-full mt-1">
                                         Primary
                                     </span>
                                 </div>
-                            </div>
+                            </div> */}
                             <div className="text-sm text-gray-700 space-y-1">
                                 <p>{address.street}</p>
-                                <p>{address.city}, {address.state}</p>
+                                <p>{address.city}, {address.district}, {address.state}, {address.country}</p>
                                 <p>PIN: {address.postal_code}</p>
                             </div>
                         </div>
@@ -556,7 +619,6 @@ const GetProfile = () => {
                                 required
                             />
                         </div>
-
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
@@ -571,6 +633,20 @@ const GetProfile = () => {
                                 />
                             </div>
                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">District</label>
+                                <input
+                                    type="text"
+                                    name="district"
+                                    value={formData.district}
+                                    onChange={handleInputChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                                    placeholder="District"
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
                                 <input
                                     type="text"
@@ -582,8 +658,19 @@ const GetProfile = () => {
                                     required
                                 />
                             </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
+                                <input
+                                    type="text"
+                                    name="country"
+                                    value={formData.country}
+                                    onChange={handleInputChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                                    placeholder="Country"
+                                    required
+                                />
+                            </div>
                         </div>
-
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Postal Code</label>
                             <input
@@ -596,7 +683,6 @@ const GetProfile = () => {
                                 required
                             />
                         </div>
-
                         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 pt-2">
                             <button
                                 type="submit"
@@ -615,6 +701,8 @@ const GetProfile = () => {
                     </form>
                 )}
             </div>
+
+
         </div>
     );
 };

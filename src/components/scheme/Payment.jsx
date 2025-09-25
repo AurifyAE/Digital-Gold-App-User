@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
-import { ArrowLeft, CreditCard, CheckCircle, Calendar } from 'lucide-react';
+import { ArrowLeft, CreditCard, CheckCircle, Calendar, AlertTriangle, X } from 'lucide-react';
 import DirhamIndigoIcon from '../../assets/images/Dirham_Indigo.png';
 import DirhamGreenIcon from '../../assets/images/Dirham_Greeen.png';
 import DirhamBlackIcon from '../../assets/images/Dirham_Black.png';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { selectScheme } from '../../api/api';
 
-const Payment = ({ scheme, onPaymentComplete, onBack }) => {
+const Payment = ({ scheme, onPaymentComplete, onBack, onKYCRequired }) => {
   const [paymentData, setPaymentData] = useState({
     pay_amount: scheme?.monthly_pay || '',
-    payment_date: new Date().getDate()
+    payment_date: new Date().getDate(),
+    scheme_type: 'cash' // Default to cash
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showKYCModal, setShowKYCModal] = useState(false);
+  const [toast, setToast] = useState({ show: false, type: '', message: '' });
 
   // Get user ID from localStorage, context, or props
   const uId = localStorage.getItem('userId');
@@ -27,6 +30,22 @@ const Payment = ({ scheme, onPaymentComplete, onBack }) => {
     }
   };
 
+  const handleSchemeTypeChange = (type) => {
+    setPaymentData({ ...paymentData, scheme_type: type });
+    
+    // Clear error when user selects a type
+    if (errors.scheme_type) {
+      setErrors({ ...errors, scheme_type: '' });
+    }
+  };
+
+  const showToast = (type, message) => {
+    setToast({ show: true, type, message });
+    setTimeout(() => {
+      setToast({ show: false, type: '', message: '' });
+    }, 5000);
+  };
+
   const validateForm = () => {
     const newErrors = {};
 
@@ -38,8 +57,24 @@ const Payment = ({ scheme, onPaymentComplete, onBack }) => {
       newErrors.payment_date = 'Please select a valid payment date (1-31)';
     }
 
+    if (!paymentData.scheme_type) {
+      newErrors.scheme_type = 'Please select a scheme type';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleKYCRedirect = () => {
+    setShowKYCModal(false);
+    // Redirect to KYC verification page or call parent handler
+    if (onKYCRequired) {
+      onKYCRequired();
+    } else {
+      // Alternative: redirect to KYC page
+      // window.location.href = '/kyc-verification';
+      console.log('Redirect to KYC verification');
+    }
   };
 
   const handlePayment = async (e) => {
@@ -54,28 +89,58 @@ const Payment = ({ scheme, onPaymentComplete, onBack }) => {
     try {
       // Prepare payment data in the required format
       const finalPaymentData = {
-        // uId: uId,
         scheme_id: scheme._id,
         pay_amount: parseFloat(paymentData.pay_amount),
-        payment_date: parseInt(paymentData.payment_date)
+        payment_date: parseInt(paymentData.payment_date),
+        scheme_type: paymentData.scheme_type
       };
 
       console.log('Payment data to be sent:', finalPaymentData);
       const response = await selectScheme(finalPaymentData);
+      
       if (response.data.success) {
         console.log('Scheme selected successfully:', response.data);
+        showToast('success', 'Payment plan setup successfully!');
+        setTimeout(() => {
+          onPaymentComplete(finalPaymentData);
+        }, 1500);
       } else {
-        console.error('Failed to select scheme:', response.data.message);
-        setErrors({ general: response.data.message || 'Failed to select scheme. Please try again.' });
-        setIsProcessing(false);
-        return;
+        // Check if the error is due to KYC verification
+        if (response.data.error === 'KYC_NOT_VERIFIED' || 
+            response.data.message?.toLowerCase().includes('kyc') ||
+            response.data.requiresKYC) {
+          setShowKYCModal(true);
+        } else {
+          console.error('Failed to select scheme:', response.data.message);
+          showToast('error', response.data.message || 'Failed to select scheme. Please try again.');
+        }
       }
-
-      // Call the completion handler
-      onPaymentComplete(finalPaymentData);
     } catch (error) {
       console.error('Payment error:', error);
-      setErrors({ general: 'Payment failed. Please try again.' });
+      
+      // Extract error message from HTML response or use default
+      let errorMessage = 'Payment failed. Please try again.';
+      
+      if (error.response?.status === 403) {
+        // Check if it's an HTML response containing KYC error
+        if (error.response.data && typeof error.response.data === 'string') {
+          if (error.response.data.includes('User kyc not verified') || 
+              error.response.data.toLowerCase().includes('kyc')) {
+            setShowKYCModal(true);
+            return;
+          }
+          // Try to extract error message from HTML
+          const match = error.response.data.match(/<pre>Error: (.+?)<br>/);
+          if (match) {
+            errorMessage = match[1];
+          }
+        }
+        showToast('error', errorMessage);
+      } else if (error.response?.data?.message) {
+        showToast('error', error.response.data.message);
+      } else {
+        showToast('error', errorMessage);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -87,7 +152,7 @@ const Payment = ({ scheme, onPaymentComplete, onBack }) => {
       green: DirhamGreenIcon,
       black: DirhamBlackIcon
     };
-    const Icon = iconMap[color] || DirhamBlackIcon; // Default to black if color is invalid
+    const Icon = iconMap[color] || DirhamBlackIcon;
     const formattedAmount = new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'AED'
@@ -104,8 +169,66 @@ const Payment = ({ scheme, onPaymentComplete, onBack }) => {
     );
   };
 
-  // Generate day options for payment date
-  const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
+  // Toast Component
+  const Toast = ({ show, type, message }) => {
+    if (!show) return null;
+
+    const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+    const icon = type === 'success' ? <CheckCircle size={20} /> : <X size={20} />;
+
+    return (
+      <div className="fixed top-4 right-4 z-50 animate-slide-in">
+        <div className={`${bgColor} text-white px-6 py-4 rounded-lg shadow-lg flex items-center space-x-3 max-w-sm`}>
+          {icon}
+          <span className="font-medium">{message}</span>
+          <button
+            onClick={() => setToast({ show: false, type: '', message: '' })}
+            className="ml-2 text-white hover:text-gray-200"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // KYC Modal Component
+  const KYCModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="text-yellow-600" size={32} />
+          </div>
+          
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            KYC Verification Required
+          </h3>
+          
+          <p className="text-gray-600 mb-6">
+            To proceed with payment setup, you need to complete your KYC (Know Your Customer) verification first. 
+            This is required for security and regulatory compliance.
+          </p>
+          
+          <div className="space-y-3">
+            <button
+              onClick={handleKYCRedirect}
+              className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg hover:bg-indigo-700 font-semibold transition-colors"
+            >
+              Complete KYC Verification
+            </button>
+            
+            <button
+              onClick={() => setShowKYCModal(false)}
+              className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -130,13 +253,44 @@ const Payment = ({ scheme, onPaymentComplete, onBack }) => {
             <h2 className="text-2xl font-bold text-gray-900">Payment Setup</h2>
           </div>
 
-          {errors.general && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm mb-6">
-              {errors.general}
-            </div>
-          )}
-
           <form onSubmit={handlePayment} className="space-y-6">
+            {/* Scheme Type Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Scheme Type
+              </label>
+              <div className="flex space-x-4">
+                {/* Cash Option */}
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="scheme_type"
+                    value="cash"
+                    checked={paymentData.scheme_type === 'cash'}
+                    onChange={(e) => handleSchemeTypeChange(e.target.value)}
+                    className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Cash</span>
+                </label>
+
+                {/* Gold Option */}
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="scheme_type"
+                    value="gold"
+                    checked={paymentData.scheme_type === 'gold'}
+                    onChange={(e) => handleSchemeTypeChange(e.target.value)}
+                    className="w-4 h-4 text-yellow-600 border-gray-300 focus:ring-yellow-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Gold</span>
+                </label>
+              </div>
+              {errors.scheme_type && (
+                <p className="mt-1 text-sm text-red-600">{errors.scheme_type}</p>
+              )}
+            </div>
+
             {/* Payment Amount */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -207,6 +361,10 @@ const Payment = ({ scheme, onPaymentComplete, onBack }) => {
                 <div className="flex justify-between">
                   <span className="text-gray-600">Scheme:</span>
                   <span className="font-medium">{scheme?.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Scheme Type:</span>
+                  <span className="font-medium capitalize">{paymentData.scheme_type}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Payment Amount:</span>
@@ -308,6 +466,28 @@ const Payment = ({ scheme, onPaymentComplete, onBack }) => {
           </div>
         </div>
       </div>
+
+      {/* KYC Modal */}
+      {showKYCModal && <KYCModal />}
+
+      {/* Toast Notification */}
+      <Toast show={toast.show} type={toast.type} message={toast.message} />
+
+      <style jsx>{`
+        @keyframes slide-in {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 };

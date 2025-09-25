@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, User, Target, CreditCard, Wallet } from 'lucide-react';
+import { LogOut, User, Target, CreditCard, Wallet, Shield } from 'lucide-react';
 
 const Navbar = () => {
   const { logout } = useAuth();
@@ -13,6 +13,7 @@ const Navbar = () => {
     { id: 'schemes', label: 'Scheme', icon: CreditCard, path: '/schemes' },
     { id: 'aims', label: 'Aim', icon: Target, path: '/aims' },
     { id: 'wallet', label: 'Wallet', icon: Wallet, path: '/wallet' },
+    { id: 'kyv', label: 'Kyc', icon: Shield, path: '/kyc' },
     { id: 'profile', label: 'Profile', icon: User, path: '/profile' },
   ];
 

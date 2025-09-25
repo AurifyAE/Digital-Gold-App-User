@@ -16,6 +16,7 @@ import AddAddress from './components/profile/AddAddress';
 import WalletPage from './components/wallet/Wallet';
 import ViewSelectedScheme from './components/scheme/ViewSelectedScheme';
 import SchemesManager from './pages/Scheme';
+import Kyc from './components/kyc/Kyc';
 
 const AppContent = () => {
   const { user, isLoading } = useAuth();
@@ -66,6 +67,7 @@ const AppContent = () => {
             <Route path="/profile" element={<GetProfile />} />
             <Route path="/profile/update" element={<UpdateProfile />} />
             <Route path="/profile/address" element={<AddAddress />} />
+            <Route path="/kyc" element={<Kyc />} />
             <Route path="*" element={<Navigate to="/schemes" replace />} />
           </Routes>
         </div>
